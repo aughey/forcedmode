@@ -4,7 +4,7 @@ mod video;
 
 /// An error that can occur when transitioning between states.
 ///
-/// Since ownership of the value is passed into the transition function, if
+/// Since ownership of the value is transferred into the transition function, if
 /// there is an error, the value is returned to the caller through this
 /// error type along with the error that occurred.
 pub struct TransitionError<OWNER> {
