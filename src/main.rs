@@ -1,26 +1,30 @@
+use actix_request_identifier::{RequestId, RequestIdentifier};
 use actix_web::{get, post, web, App, HttpResponse, HttpServer, Responder};
 use forcedmode::{
     HardwareConfigure, HardwareOperate, HardwareStandby, MockHardware, TransitionError,
 };
 use tokio::sync::Mutex;
+use tracing::info;
 
-fn dance_hardware<H>(hardware: H) -> Result<H, TransitionError<H>>
+async fn dance_hardware<H>(hardware: H, id: &str) -> Result<H, TransitionError<H>>
 where
     H: HardwareStandby,
 {
     let config = hardware.configure()?;
-    println!("currently in state {}", config.state());
+    info!("{id} currently in state {}", config.state());
     // go back to standby
     let hardware = config.standby();
-    let operate = hardware.operate()?;
-    println!("now in state {}", operate.state());
+    let operate = hardware.operate().await?;
+    info!("{id} now in state {}", operate.state());
     let hardware = operate.standby();
-    println!("currently in state {}", hardware.state());
+    info!("{id} currently in state {}", hardware.state());
     Ok(hardware)
 }
 
 #[get("/")]
-async fn hello(data: SharedAppState) -> actix_web::Result<HttpResponse> {
+async fn hello(data: SharedAppState, id: RequestId) -> actix_web::Result<HttpResponse> {
+    let id = id.as_str();
+    info!("{id} Starting hello");
     // Try to get the hardware from the shared state.
     // It might be in use and if so we return an error.
     let hardware =
@@ -28,8 +32,10 @@ async fn hello(data: SharedAppState) -> actix_web::Result<HttpResponse> {
             actix_web::error::ErrorConflict("hardware is currently in use elsewhere")
         })?;
 
+    info!("{id} Got lock on hardware");
+
     // Do a little dance with the hardware
-    match dance_hardware(hardware) {
+    match dance_hardware(hardware, id).await {
         Ok(hardware) => {
             // Dance complete
             // now put it back where we found it
@@ -43,6 +49,7 @@ async fn hello(data: SharedAppState) -> actix_web::Result<HttpResponse> {
     }
 
     // Dance complete
+    info!("{id} Finished hello");
     Ok(HttpResponse::Ok().body("Hello world!"))
 }
 
@@ -62,14 +69,17 @@ type SharedAppState = web::Data<Mutex<AppState>>;
 
 #[tokio::main]
 async fn main() -> std::io::Result<()> {
+    tracing_subscriber::fmt::init();
+    let appdata = web::Data::new(Mutex::new(AppState {
+        hardware: Some(MockHardware::new()),
+    }));
     HttpServer::new(move || {
         App::new()
-            .app_data(web::Data::new(Mutex::new(AppState {
-                hardware: Some(MockHardware::new()),
-            })))
+            .app_data(appdata.clone())
             .service(hello)
             .service(echo)
             .route("/hey", web::get().to(manual_hello))
+            .wrap(RequestIdentifier::with_uuid())
     })
     .bind(("127.0.0.1", 8080))?
     .run()

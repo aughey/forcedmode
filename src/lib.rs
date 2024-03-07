@@ -1,3 +1,5 @@
+use std::future::Future;
+
 pub struct TransitionError<ME> {
     pub me: ME,
     pub error: anyhow::Error,
@@ -9,7 +11,7 @@ pub trait HardwareStandby {
     where
         Self: Sized;
     type Operate: HardwareOperate<Standby = Self>;
-    fn operate(self) -> Result<Self::Operate, TransitionError<Self>>
+    fn operate(self) -> impl Future<Output = Result<Self::Operate, TransitionError<Self>>>
     where
         Self: Sized;
     fn state(&self) -> &'static str {
@@ -40,7 +42,9 @@ impl HardwareStandby for MockHardware {
         Ok(self)
     }
     type Operate = MockHardware;
-    fn operate(self) -> Result<Self::Operate, crate::TransitionError<Self>> {
+    async fn operate(self) -> Result<Self::Operate, crate::TransitionError<Self>> {
+        // sleep 2 seconds
+        tokio::time::sleep(std::time::Duration::from_secs(2)).await;
         Ok(self)
     }
 }
@@ -64,20 +68,20 @@ impl MockHardware {
 
 #[cfg(test)]
 mod tests {
-    use crate::{HardwareConfigure, HardwareOperate, HardwareStandby};
+    use crate::{HardwareConfigure, HardwareOperate, HardwareStandby, MockHardware};
 
-    fn test_hardware(mut hardware: impl HardwareStandby) -> anyhow::Result<()> {
+    async fn test_hardware(mut hardware: impl HardwareStandby) -> anyhow::Result<()> {
         let configure = hardware.configure().map_err(|me| me.error)?;
         hardware = configure.standby();
-        let operate = hardware.operate().map_err(|me| me.error)?;
+        let operate = hardware.operate().await.map_err(|me| me.error)?;
         hardware = operate.standby();
         drop(hardware);
         Ok(())
     }
 
-    #[test]
-    fn test_mock() -> anyhow::Result<()> {
-        test_hardware(MockHardware::new())
+    #[tokio::test]
+    async fn test_mock() -> anyhow::Result<()> {
+        test_hardware(MockHardware::new()).await
     }
 
     struct Behavior<HW>
@@ -95,7 +99,7 @@ mod tests {
                 hardware: Some(hardware),
             }
         }
-        fn run(&mut self) -> anyhow::Result<()> {
+        async fn run(&mut self) -> anyhow::Result<()> {
             let configure = self
                 .hardware
                 .take()
@@ -103,7 +107,7 @@ mod tests {
                 .configure()
                 .map_err(|me| me.error)?;
 
-            let operate = configure.standby().operate().map_err(|me| me.error)?;
+            let operate = configure.standby().operate().await.map_err(|me| me.error)?;
 
             self.hardware = Some(operate.standby());
 
@@ -111,9 +115,9 @@ mod tests {
         }
     }
 
-    #[test]
-    fn test_struct() {
+    #[tokio::test]
+    async fn test_struct() {
         let mut behavior = Behavior::new(MockHardware::new());
-        assert!(behavior.run().is_ok());
+        assert!(behavior.run().await.is_ok());
     }
 }
