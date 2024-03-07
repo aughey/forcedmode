@@ -4,7 +4,7 @@ use forcedmode::{
     HardwareConfigure, HardwareOperate, HardwareStandby, MockHardware, TransitionError,
 };
 use tokio::sync::Mutex;
-use tracing::info;
+use tracing::{info, trace, warn};
 
 async fn dance_hardware<H>(hardware: H, id: &str) -> Result<H, TransitionError<H>>
 where
@@ -24,15 +24,15 @@ where
 #[get("/")]
 async fn hello(data: SharedAppState, id: RequestId) -> actix_web::Result<HttpResponse> {
     let id = id.as_str();
-    info!("{id} Starting hello");
+    trace!("{id} Starting hello");
     // Try to get the hardware from the shared state.
     // It might be in use and if so we return an error.
-    let hardware =
-        data.lock().await.hardware.take().ok_or_else(|| {
-            actix_web::error::ErrorConflict("hardware is currently in use elsewhere")
-        })?;
+    let hardware = data.lock().await.hardware.take().ok_or_else(|| {
+        warn!("{id} Attempt to use hardware while it is currently in use");
+        actix_web::error::ErrorConflict("hardware is currently in use elsewhere")
+    })?;
 
-    info!("{id} Got lock on hardware");
+    trace!("{id} Got lock on hardware");
 
     // Do a little dance with the hardware
     match dance_hardware(hardware, id).await {
@@ -49,7 +49,7 @@ async fn hello(data: SharedAppState, id: RequestId) -> actix_web::Result<HttpRes
     }
 
     // Dance complete
-    info!("{id} Finished hello");
+    trace!("{id} Finished hello");
     Ok(HttpResponse::Ok().body("Hello world!"))
 }
 
@@ -70,9 +70,15 @@ type SharedAppState = web::Data<Mutex<AppState>>;
 #[tokio::main]
 async fn main() -> std::io::Result<()> {
     tracing_subscriber::fmt::init();
+
+    // Create the shared state.
+    // Note, we have to create this outside the closure for the HttpServer
+    // so that there is only one and it's not created multiple times.
     let appdata = web::Data::new(Mutex::new(AppState {
         hardware: Some(MockHardware::new()),
     }));
+
+    // Configure/run the web server
     HttpServer::new(move || {
         App::new()
             .app_data(appdata.clone())
