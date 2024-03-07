@@ -1,18 +1,13 @@
 use actix_request_identifier::{RequestId, RequestIdentifier};
 use actix_web::{get, post, web, App, HttpResponse, HttpServer, Responder};
-use forcedmode::{
-    HardwareConfigure, HardwareOperate, HardwareStandby, MockHardware, TransitionError,
-};
+use forcedmode::{ConfigureMode, MockHardware, OperateMode, StandbyMode, TransitionError};
 use tokio::sync::Mutex;
 use tracing::{info, trace, warn};
 
 // async fn dance_hardware<H>(hardware: H, id: &str) -> Result<H, TransitionError<H>>
 // where
 //     H: HardwareStandby,
-async fn dance_hardware<H: HardwareStandby>(
-    hardware: H,
-    id: &str,
-) -> Result<H, TransitionError<H>> {
+async fn dance_hardware<H: StandbyMode>(hardware: H, id: &str) -> Result<H, TransitionError<H>> {
     let config = hardware.configure().await?;
     info!("{id} currently in state {}", config.state());
     // go back to standby

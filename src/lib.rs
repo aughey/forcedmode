@@ -6,12 +6,12 @@ pub struct TransitionError<ME> {
     pub error: anyhow::Error,
 }
 
-pub trait HardwareStandby {
-    type Configure: HardwareConfigure<Standby = Self>;
+pub trait StandbyMode {
+    type Configure: ConfigureMode<Standby = Self>;
     fn configure(self) -> impl Future<Output = Result<Self::Configure, TransitionError<Self>>>
     where
         Self: Sized;
-    type Operate: HardwareOperate<Standby = Self>;
+    type Operate: OperateMode<Standby = Self>;
     fn operate(self) -> impl Future<Output = Result<Self::Operate, TransitionError<Self>>>
     where
         Self: Sized;
@@ -20,16 +20,16 @@ pub trait HardwareStandby {
     }
 }
 
-pub trait HardwareOperate {
-    type Standby: HardwareStandby<Configure = Self>;
+pub trait OperateMode {
+    type Standby: StandbyMode<Operate = Self>;
     fn standby(self) -> impl Future<Output = Self::Standby>;
     fn state(&self) -> &'static str {
         "operate"
     }
 }
 
-pub trait HardwareConfigure {
-    type Standby: HardwareStandby<Configure = Self>;
+pub trait ConfigureMode {
+    type Standby: StandbyMode<Configure = Self>;
     fn standby(self) -> impl Future<Output = Self::Standby>;
     fn state(&self) -> &'static str {
         "configure"
@@ -37,28 +37,30 @@ pub trait HardwareConfigure {
 }
 
 pub struct MockHardware;
-impl HardwareStandby for MockHardware {
-    type Configure = MockHardware;
+pub struct MockOperate;
+pub struct MockConfig;
+impl StandbyMode for MockHardware {
+    type Configure = MockConfig;
     async fn configure(self) -> Result<Self::Configure, crate::TransitionError<Self>> {
-        Ok(self)
+        Ok(MockConfig {}) // <-- we'd usually transfer ownership of internal handles here
     }
-    type Operate = MockHardware;
+    type Operate = MockOperate;
     async fn operate(self) -> Result<Self::Operate, crate::TransitionError<Self>> {
         // sleep 2 seconds
         tokio::time::sleep(std::time::Duration::from_secs(2)).await;
-        Ok(self)
+        Ok(MockOperate {})
     }
 }
-impl HardwareOperate for MockHardware {
+impl OperateMode for MockOperate {
     type Standby = MockHardware;
     async fn standby(self) -> Self::Standby {
-        self
+        MockHardware {}
     }
 }
-impl HardwareConfigure for MockHardware {
+impl ConfigureMode for MockConfig {
     type Standby = MockHardware;
     async fn standby(self) -> Self::Standby {
-        self
+        MockHardware {}
     }
 }
 impl MockHardware {
@@ -69,9 +71,9 @@ impl MockHardware {
 
 #[cfg(test)]
 mod tests {
-    use crate::{HardwareConfigure, HardwareOperate, HardwareStandby, MockHardware};
+    use crate::{ConfigureMode, MockHardware, OperateMode, StandbyMode};
 
-    async fn test_hardware(mut hardware: impl HardwareStandby) -> anyhow::Result<()> {
+    async fn test_hardware(mut hardware: impl StandbyMode) -> anyhow::Result<()> {
         let configure = hardware.configure().await.map_err(|me| me.error)?;
         hardware = configure.standby().await;
         let operate = hardware.operate().await.map_err(|me| me.error)?;
@@ -87,13 +89,13 @@ mod tests {
 
     struct Behavior<HW>
     where
-        HW: HardwareStandby,
+        HW: StandbyMode,
     {
         hardware: Option<HW>,
     }
     impl<HW> Behavior<HW>
     where
-        HW: HardwareStandby,
+        HW: StandbyMode,
     {
         fn new(hardware: HW) -> Self {
             Self {
