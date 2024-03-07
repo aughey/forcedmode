@@ -79,7 +79,7 @@ async fn main() -> std::io::Result<()> {
     // Note, we have to create this outside the closure for the HttpServer
     // so that there is only one and it's not created multiple times.
     let appdata = web::Data::new(Mutex::new(AppState {
-        hardware: Some(MockHardware {}),
+        hardware: Some(MockHardware::default()),
     }));
 
     // Configure/run the web server

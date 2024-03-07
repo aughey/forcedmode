@@ -13,7 +13,9 @@ pub struct TransitionError<OWNER> {
 }
 
 /// A representation of a hardware device that can be in one of three states:
-/// Standby, Configure, or Operate.
+/// Standby, Configure, or Operate.  Transitions happen between Standby and
+/// Configure, and Standby and Operate.  Both Configure and Operate can
+/// transition back to Standby.
 pub trait StandbyMode {
     // The associated types are the types that the StandbyMode can transition to.
     // Note, when transitioning back to StandbyMode, the associated type is forced
