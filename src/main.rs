@@ -30,9 +30,15 @@ async fn hello(data: SharedAppState, id: RequestId) -> actix_web::Result<HttpRes
         actix_web::error::ErrorConflict("hardware is currently in use elsewhere")
     })?;
 
-    trace!("{id} Got lock on hardware");
+    // At this point we've removed hardware from our shared state.
+    // We need to care for it and make sure that we put it back when we're done.
 
-    // Do a little dance with the hardware
+    trace!("{id} Got access hardware");
+
+    // Do a little dance with the hardware.
+    // At this point, we transfer ownship of hardware to the dance_hardware function.
+    // Again, we need to take care that we don't lose it.  dance_hardware must
+    // give it back to us through the return type, either by succeeding or failing.
     match dance_hardware(hardware, id).await {
         Ok(hardware) => {
             // Dance complete
