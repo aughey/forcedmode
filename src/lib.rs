@@ -2,11 +2,18 @@ use std::future::Future;
 pub mod mock;
 mod video;
 
-pub struct TransitionError<ME> {
-    pub me: ME,
+/// An error that can occur when transitioning between states.
+///
+/// Since ownership of the value is passed into the transition function, if
+/// there is an error, the value is returned to the caller through this
+/// error type along with the error that occurred.
+pub struct TransitionError<OWNER> {
+    pub owner: OWNER,
     pub error: anyhow::Error,
 }
 
+/// A representation of a hardware device that can be in one of three states:
+/// Standby, Configure, or Operate.
 pub trait StandbyMode {
     // The associated types are the types that the StandbyMode can transition to.
     // Note, when transitioning back to StandbyMode, the associated type is forced
@@ -29,6 +36,7 @@ pub trait StandbyMode {
     }
 }
 
+/// A representation of a hardware device that is in the Operate state.
 pub trait OperateMode {
     /// The associated type is the type that the OperateMode can transition to.
     type Standby: StandbyMode<Operate = Self>;
@@ -42,6 +50,7 @@ pub trait OperateMode {
     }
 }
 
+/// A representation of a hardware device that is in the Configure state.
 pub trait ConfigureMode {
     /// The associated type is the type that the ConfigureMode can transition to.
     type Standby: StandbyMode<Configure = Self>;

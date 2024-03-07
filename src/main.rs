@@ -47,7 +47,7 @@ async fn hello(data: SharedAppState, id: RequestId) -> actix_web::Result<HttpRes
         }
         Err(e) => {
             // Something went wrong, put the hardware back and report the error
-            data.lock().await.hardware = Some(e.me);
+            data.lock().await.hardware = Some(e.owner);
             return Err(actix_web::error::ErrorImATeapot(e.error));
         }
     }
