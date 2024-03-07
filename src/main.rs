@@ -1,6 +1,6 @@
 use actix_request_identifier::{RequestId, RequestIdentifier};
 use actix_web::{get, post, web, App, HttpResponse, HttpServer, Responder};
-use forcedmode::{ConfigureMode, MockHardware, OperateMode, StandbyMode, TransitionError};
+use forcedmode::{mock::MockHardware, ConfigureMode, OperateMode, StandbyMode, TransitionError};
 use tokio::sync::Mutex;
 use tracing::{info, trace, warn};
 
@@ -73,7 +73,7 @@ async fn main() -> std::io::Result<()> {
     // Note, we have to create this outside the closure for the HttpServer
     // so that there is only one and it's not created multiple times.
     let appdata = web::Data::new(Mutex::new(AppState {
-        hardware: Some(MockHardware::new()),
+        hardware: Some(MockHardware {}),
     }));
 
     // Configure/run the web server
