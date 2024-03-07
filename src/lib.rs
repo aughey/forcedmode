@@ -3,7 +3,7 @@ pub struct TransitionError<ME> {
     pub error: anyhow::Error,
 }
 
-trait HardwareStandby {
+pub trait HardwareStandby {
     type Configure: HardwareConfigure<Standby = Self>;
     fn configure(self) -> Result<Self::Configure, TransitionError<Self>>
     where
@@ -12,50 +12,59 @@ trait HardwareStandby {
     fn operate(self) -> Result<Self::Operate, TransitionError<Self>>
     where
         Self: Sized;
+    fn state(&self) -> &'static str {
+        "standby"
+    }
 }
 
-trait HardwareOperate {
+pub trait HardwareOperate {
     type Standby: HardwareStandby<Configure = Self>;
     fn standby(self) -> Self::Standby;
+    fn state(&self) -> &'static str {
+        "operate"
+    }
 }
 
-trait HardwareConfigure {
+pub trait HardwareConfigure {
     type Standby: HardwareStandby<Configure = Self>;
     fn standby(self) -> Self::Standby;
+    fn state(&self) -> &'static str {
+        "configure"
+    }
+}
+
+pub struct MockHardware;
+impl HardwareStandby for MockHardware {
+    type Configure = MockHardware;
+    fn configure(self) -> Result<Self::Configure, crate::TransitionError<Self>> {
+        Ok(self)
+    }
+    type Operate = MockHardware;
+    fn operate(self) -> Result<Self::Operate, crate::TransitionError<Self>> {
+        Ok(self)
+    }
+}
+impl HardwareOperate for MockHardware {
+    type Standby = MockHardware;
+    fn standby(self) -> Self::Standby {
+        self
+    }
+}
+impl HardwareConfigure for MockHardware {
+    type Standby = MockHardware;
+    fn standby(self) -> Self::Standby {
+        self
+    }
+}
+impl MockHardware {
+    pub fn new() -> Self {
+        MockHardware
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use crate::{HardwareConfigure, HardwareOperate, HardwareStandby};
-
-    struct MockHardware;
-    impl HardwareStandby for MockHardware {
-        type Configure = MockHardware;
-        fn configure(self) -> Result<Self::Configure, crate::TransitionError<Self>> {
-            Ok(self)
-        }
-        type Operate = MockHardware;
-        fn operate(self) -> Result<Self::Operate, crate::TransitionError<Self>> {
-            Ok(self)
-        }
-    }
-    impl HardwareOperate for MockHardware {
-        type Standby = MockHardware;
-        fn standby(self) -> Self::Standby {
-            self
-        }
-    }
-    impl HardwareConfigure for MockHardware {
-        type Standby = MockHardware;
-        fn standby(self) -> Self::Standby {
-            self
-        }
-    }
-    impl MockHardware {
-        fn new() -> Self {
-            MockHardware
-        }
-    }
 
     fn test_hardware(mut hardware: impl HardwareStandby) -> anyhow::Result<()> {
         let configure = hardware.configure().map_err(|me| me.error)?;
