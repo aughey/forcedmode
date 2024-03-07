@@ -1,4 +1,5 @@
 use std::future::Future;
+mod video;
 
 pub struct TransitionError<ME> {
     pub me: ME,
