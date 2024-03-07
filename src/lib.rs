@@ -7,7 +7,7 @@ pub struct TransitionError<ME> {
 
 pub trait HardwareStandby {
     type Configure: HardwareConfigure<Standby = Self>;
-    fn configure(self) -> Result<Self::Configure, TransitionError<Self>>
+    fn configure(self) -> impl Future<Output = Result<Self::Configure, TransitionError<Self>>>
     where
         Self: Sized;
     type Operate: HardwareOperate<Standby = Self>;
@@ -21,7 +21,7 @@ pub trait HardwareStandby {
 
 pub trait HardwareOperate {
     type Standby: HardwareStandby<Configure = Self>;
-    fn standby(self) -> Self::Standby;
+    fn standby(self) -> impl Future<Output = Self::Standby>;
     fn state(&self) -> &'static str {
         "operate"
     }
@@ -29,7 +29,7 @@ pub trait HardwareOperate {
 
 pub trait HardwareConfigure {
     type Standby: HardwareStandby<Configure = Self>;
-    fn standby(self) -> Self::Standby;
+    fn standby(self) -> impl Future<Output = Self::Standby>;
     fn state(&self) -> &'static str {
         "configure"
     }
@@ -38,7 +38,7 @@ pub trait HardwareConfigure {
 pub struct MockHardware;
 impl HardwareStandby for MockHardware {
     type Configure = MockHardware;
-    fn configure(self) -> Result<Self::Configure, crate::TransitionError<Self>> {
+    async fn configure(self) -> Result<Self::Configure, crate::TransitionError<Self>> {
         Ok(self)
     }
     type Operate = MockHardware;
@@ -50,13 +50,13 @@ impl HardwareStandby for MockHardware {
 }
 impl HardwareOperate for MockHardware {
     type Standby = MockHardware;
-    fn standby(self) -> Self::Standby {
+    async fn standby(self) -> Self::Standby {
         self
     }
 }
 impl HardwareConfigure for MockHardware {
     type Standby = MockHardware;
-    fn standby(self) -> Self::Standby {
+    async fn standby(self) -> Self::Standby {
         self
     }
 }
@@ -71,10 +71,10 @@ mod tests {
     use crate::{HardwareConfigure, HardwareOperate, HardwareStandby, MockHardware};
 
     async fn test_hardware(mut hardware: impl HardwareStandby) -> anyhow::Result<()> {
-        let configure = hardware.configure().map_err(|me| me.error)?;
-        hardware = configure.standby();
+        let configure = hardware.configure().await.map_err(|me| me.error)?;
+        hardware = configure.standby().await;
         let operate = hardware.operate().await.map_err(|me| me.error)?;
-        hardware = operate.standby();
+        hardware = operate.standby().await;
         drop(hardware);
         Ok(())
     }
@@ -105,11 +105,17 @@ mod tests {
                 .take()
                 .ok_or_else(|| anyhow::anyhow!("hardware is missing"))?
                 .configure()
+                .await
                 .map_err(|me| me.error)?;
 
-            let operate = configure.standby().operate().await.map_err(|me| me.error)?;
+            let operate = configure
+                .standby()
+                .await
+                .operate()
+                .await
+                .map_err(|me| me.error)?;
 
-            self.hardware = Some(operate.standby());
+            self.hardware = Some(operate.standby().await);
 
             Ok(())
         }

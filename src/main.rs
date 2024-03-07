@@ -6,17 +6,20 @@ use forcedmode::{
 use tokio::sync::Mutex;
 use tracing::{info, trace, warn};
 
-async fn dance_hardware<H>(hardware: H, id: &str) -> Result<H, TransitionError<H>>
-where
-    H: HardwareStandby,
-{
-    let config = hardware.configure()?;
+// async fn dance_hardware<H>(hardware: H, id: &str) -> Result<H, TransitionError<H>>
+// where
+//     H: HardwareStandby,
+async fn dance_hardware<H: HardwareStandby>(
+    hardware: H,
+    id: &str,
+) -> Result<H, TransitionError<H>> {
+    let config = hardware.configure().await?;
     info!("{id} currently in state {}", config.state());
     // go back to standby
-    let hardware = config.standby();
+    let hardware = config.standby().await;
     let operate = hardware.operate().await?;
     info!("{id} now in state {}", operate.state());
-    let hardware = operate.standby();
+    let hardware = operate.standby().await;
     info!("{id} currently in state {}", hardware.state());
     Ok(hardware)
 }
