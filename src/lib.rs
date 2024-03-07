@@ -14,11 +14,11 @@ pub trait StandbyMode {
     type Configure: ConfigureMode<Standby = Self>;
     type Operate: OperateMode<Standby = Self>;
 
-    /// Transition to the configure state.  On error, will return self back to us.
+    /// Transition to the configure state.  On error, will return self back to the caller.
     fn configure(self) -> impl Future<Output = Result<Self::Configure, TransitionError<Self>>>
     where
         Self: Sized;
-    /// Transition to the operate state.  On error, will return self back to us.
+    /// Transition to the operate state.  On error, will return self back to the caller.
     fn operate(self) -> impl Future<Output = Result<Self::Operate, TransitionError<Self>>>
     where
         Self: Sized;
